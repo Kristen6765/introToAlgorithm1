@@ -1,0 +1,293 @@
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.text.*;
+import java.lang.Math;
+
+public class DecisionTree implements Serializable {
+    
+    DTNode rootDTNode;
+    int minSizeDatalist; //minimum number of datapoints that should be present in the dataset so as to initiate a split
+    //Mention the serialVersionUID explicitly in order to avoid getting errors while deserializing.
+    public static final long serialVersionUID = 343L;
+    public DecisionTree(ArrayList<Datum> datalist , int min) {
+        minSizeDatalist = min;
+        rootDTNode = (new DTNode()).fillDTNode(datalist);
+    }
+    
+    class DTNode implements Serializable{
+        //Mention the serialVersionUID explicitly in order to avoid getting errors while deserializing.
+        public static final long serialVersionUID = 438L;
+        boolean leaf;
+        int label = -1;      // only defined if node is a leaf
+        int attribute; // only defined if node is not a leaf
+        double threshold;  // only defined if node is not a leaf
+        
+        
+        
+        DTNode left, right; //the left and right child of a particular node. (null if leaf)
+        
+        DTNode() {
+            leaf = true;
+            threshold = Double.MAX_VALUE;
+        }
+        
+        
+        public double[] helperSplit(ArrayList<Datum> datalist) {
+            double[] a=new double[2];
+            double best_avg_entropy=Double.MAX_VALUE;
+            int best_attr=-1;
+            double best_thrshold=-1;
+            double current_avg_entropy;
+            
+            
+            int i,j,k;
+            
+            
+            double D1,D2;
+            
+            for(i=0;i<2;i++) {
+                for(j=0;j<datalist.size();j++) {
+                    ArrayList<Datum> d1 = new ArrayList<Datum>();
+                    ArrayList<Datum> d2= new ArrayList<Datum>();
+                    for(k=0;k<datalist.size();k++) {
+                        if(datalist.get(k).x[i]<datalist.get(j).x[i]) {
+                            d1.add(datalist.get(k));
+                        }else {d2.add(datalist.get(k));}
+                        
+                    }
+                    D1=calcEntropy(d1);
+                    D2=calcEntropy(d2);
+                    
+                    current_avg_entropy= (d1.size()*D1)/datalist.size() + (d2.size()*D2)/datalist.size();//(w1*D1)+(w2*D2);
+                    if(best_avg_entropy>current_avg_entropy) {
+                        best_avg_entropy=current_avg_entropy;
+                        
+                        best_attr=i;
+                        
+                        best_thrshold=datalist.get(j).x[i];
+                        
+                        a[0]=best_attr;
+                        a[1]=best_thrshold;
+                        
+                    }
+                }
+            }
+            return a;
+            
+        }
+        
+        
+        // this method takes in a datalist (ArrayList of type datum) and a minSizeInClassification (int) and returns
+        // the calling DTNode object as the root of a decision tree trained using the datapoints present in the
+        // datalist variable
+        // Also, KEEP IN MIND that the left and right child of the node correspond to "less than" and "greater than or equal to" threshold
+        DTNode fillDTNode(ArrayList<Datum> datalist) {
+            
+            int flag=0;
+            int i=0;
+            //ArrayList<Datum> d1 = new ArrayList<Datum>();
+            //ArrayList<Datum> d2= new ArrayList<Datum>();
+            
+            
+            if(datalist.size()>=minSizeDatalist) {
+                while(i<datalist.size()) {
+                    if(datalist.get(0).y==datalist.get(i).y) {
+                        flag=1;
+                    }else{  flag =0;break;}
+                    i++;
+                }//if the labels of all the datum are equal, build a leaf node
+                if(flag>0) {
+                    // DTNode leafnode = new DTNode();
+                    
+                    this.label=datalist.get(0).y;
+                    return this;
+                }//if the labels of all the datum are NOT equal
+                else {
+                    //quesiton; determine the beast slipt; i just wrote the "helper method" in the method
+                    //DTNode n = new DTNode();
+                    double[] a=helperSplit(datalist);
+                    this.attribute=(int)a[0];
+                    this.threshold=a[1];
+                    int j;
+                    ArrayList<Datum> d1 = new ArrayList<Datum>();
+                    ArrayList<Datum> d2= new ArrayList<Datum>();
+                    
+                    for(j=0;j<datalist.size();j++) {
+                        //System.out.println(datalist.get(j));
+                        
+                        //System.out.println(this.threshold);
+                        if(datalist.get(j).x[this.attribute]<this.threshold) {
+                            
+                            
+                            d1.add(datalist.get(j));
+                        }else {
+                            d2.add(datalist.get(j));
+                        }
+                    }
+                    this.leaf=false;
+                    if(d1.size()>0) {
+                        this.left=(new DTNode()).fillDTNode(d1);
+                    }
+                    if(d2.size()>0) {
+                        this.right=(new DTNode()).fillDTNode(d2);
+                    }
+                }
+                
+            }
+            else {//need to creat a new DTnode to represent the the datalset here, which has a lebal that the majorty in the set has
+                
+                this.label= findMajority(datalist);
+                
+            }
+            
+            return this;
+        }
+        
+        
+        
+        
+        //This is a helper method. Given a datalist, this method returns the label that has the most
+        // occurences. In case of a tie it returns the label with the smallest value (numerically) involved in the tie.
+        int findMajority(ArrayList<Datum> datalist)
+        {
+            int l = datalist.get(0).x.length;
+            int [] votes = new int[l];
+            
+            //loop through the data and count the occurrences of datapoints of each label
+            for (Datum data : datalist)
+            {
+                votes[data.y]+=1;
+            }
+            int max = -1;
+            int max_index = -1;
+            //find the label with the max occurrences
+            for (int i = 0 ; i < l ;i++)
+            {
+                if (max<votes[i])
+                {
+                    max = votes[i];
+                    max_index = i;
+                }
+            }
+            return max_index;
+        }
+        
+        
+        
+        
+        // This method takes in a datapoint (excluding the label) in the form of an array of type double (Datum.x) and
+        // returns its corresponding label, as determined by the decision tree
+        int classifyAtNode(double[] xQuery) {
+            
+            if(this.leaf) {
+                return this.label;
+            }else {
+                if(xQuery[this.attribute]<threshold) {
+                    return (this.left).classifyAtNode(xQuery);
+                }else { return (this.right).classifyAtNode(xQuery);}
+            }
+            
+        }
+        
+        
+        //given another DTNode object, this method checks if the tree rooted at the calling DTNode is equal to the tree rooted
+        //at DTNode object passed as the parameter
+        public boolean equals(Object dt2)
+        {   if(!(dt2 instanceof DTNode)) {
+            System.out.println("parameter is not an instnaceof DTNode, please check");
+            }
+            int x=-1;
+            DTNode dnode2=(DTNode)dt2;
+            if(dnode2.leaf&&this.leaf) {/////////////////////////////////dnode2.leaf
+                
+                if(dnode2.label==this.label)
+                    return true;
+            }else {
+                if(this.left!=null&&dnode2.left!=null&&dnode2.attribute==this.attribute&&dnode2.threshold==this.threshold) {
+                    
+                    x=1;
+                }
+                if(this.right!=null&&dnode2.right!=null&&x>0) {
+                    return this.left.equals(dnode2.left)&&this.right.equals(dnode2.right);
+                }
+            }
+            
+            
+            
+            
+            return false;
+        }
+    }
+    
+    
+    
+    //Given a dataset, this retuns the entropy of the dataset
+    double calcEntropy(ArrayList<Datum> datalist)
+    {
+        double entropy = 0;
+        double px = 0;
+        float [] counter= new float[2];
+        if (datalist.size()==0)
+            return 0;
+        double num0 = 0.00000001,num1 = 0.000000001;
+        
+        //calculates the number of points belonging to each of the labels
+        for (Datum d : datalist)
+        {
+            counter[d.y]+=1;
+        }
+        //calculates the entropy using the formula specified in the document
+        for (int i = 0 ; i< counter.length ; i++)
+        {
+            if (counter[i]>0)
+            {
+                px = counter[i]/datalist.size();
+                entropy -= (px*Math.log(px)/Math.log(2));
+            }
+        }
+        
+        return entropy;
+    }
+    
+    
+    // given a datapoint (without the label) calls the DTNode.classifyAtNode() on the rootnode of the calling DecisionTree object
+    int classify(double[] xQuery ) {
+        DTNode node = this.rootDTNode;
+        return node.classifyAtNode( xQuery );
+    }
+    
+    // Checks the performance of a DecisionTree on a dataset
+    //  This method is provided in case you would like to compare your
+    //results with the reference values provided in the PDF in the Data
+    //section of the PDF
+    
+    String checkPerformance( ArrayList<Datum> datalist)
+    {
+        DecimalFormat df = new DecimalFormat("0.000");
+        float total = datalist.size();
+        float count = 0;
+        
+        for (int s = 0 ; s < datalist.size() ; s++) {
+            double[] x = datalist.get(s).x;
+            int result = datalist.get(s).y;
+            if (classify(x) != result) {
+                count = count + 1;
+            }
+        }
+        
+        return df.format((count/total));
+    }
+    
+    
+    //Given two DecisionTree objects, this method checks if both the trees are equal by
+    //calling onto the DTNode.equals() method
+    public static boolean equals(DecisionTree dt1,  DecisionTree dt2)
+    {
+        boolean flag = true;
+        flag = dt1.rootDTNode.equals(dt2.rootDTNode);
+        return flag;
+    }
+    
+}
+
